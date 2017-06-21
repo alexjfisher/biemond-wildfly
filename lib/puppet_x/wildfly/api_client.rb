@@ -36,6 +36,7 @@ module PuppetX
           retry
         end
 
+        Puppet.debug "authz_header response #{response}"
         if response['www-authenticate'] =~ /digest/i
           digest_auth.auth_header @uri, response['www-authenticate'], 'POST'
         else
@@ -55,6 +56,7 @@ module PuppetX
 
         http_request.body = body.to_json
         http_response = @http_client.request http_request
+        Puppet.debug "submit http_response = #{http_response.inspect}"
         response = JSON.parse(http_response.body)
 
         unless response['outcome'] == 'success' || ignore_failed_outcome
