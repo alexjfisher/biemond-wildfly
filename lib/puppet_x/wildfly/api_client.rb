@@ -47,16 +47,32 @@ module PuppetX
       def submit(body, ignore_failed_outcome = false)
         http_request = Net::HTTP::Post.new @uri.request_uri
         http_request.add_field 'Content-type', 'application/json'
-        authz = authz_header
-        if authz =~ /digest/i
-          http_request.add_field 'Authorization', authz
-        else
-          http_request.basic_auth @username, @password
-        end
 
         http_request.body = body.to_json
-        http_response = @http_client.request http_request
-        Puppet.debug "submit http_response = #{http_response.inspect}"
+        retried = 0
+        begin
+          authz = authz_header
+          if authz =~ /digest/i
+            Puppet.debug "Adding Authorization header #{authz}"
+            http_request['Authorization'] = authz
+          else
+            Puppet.debug "Adding basic auth #{@username}:#{@password}"
+            http_request.basic_auth @username, @password
+          end
+          http_response = @http_client.request http_request
+          Puppet.debug "submit http_response = #{http_response.inspect}"
+          Puppet.debug "code = #{http_response.code}"
+          raise "503 Service Unavailable" unless http_response.code == '200'
+        rescue => e
+          Puppet.debug "caught #{e.inspect}"
+          raise e unless retried + 1 < 6
+          retried += 1
+          Puppet.debug "retrying in 10 seconds"
+          sleep 10
+          retry
+        end
+
+
         response = JSON.parse(http_response.body)
 
         unless response['outcome'] == 'success' || ignore_failed_outcome
